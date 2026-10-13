@@ -19,8 +19,15 @@
       "registryType": "oci",
       "identifier": "ghcr.io/fineprintcorp/fineprint-mcp:latest",
       "version": "1.0.0",
-      "fileSha256": "",
-      "runtimeHint": "docker"
+      "runtimeHint": "docker",
+      "environmentVariables": [
+        {
+          "name": "FINEPRINT_API_KEY",
+          "description": "API key for the Fineprint scan API. Get a free trial key from the signup form on the Fineprint site. Required for all scan tools.",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
     }
   ]
 }
