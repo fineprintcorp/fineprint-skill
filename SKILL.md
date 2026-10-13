@@ -1,6 +1,6 @@
 ---
 name: fineprint
-description: Scan terms of service before accepting them. Use when signing up for any service, clicking "agree" to terms, accepting a EULA or privacy policy, or committing the user to any agreement, subscription, or vendor on their behalf. Returns a 0-100 risk score, a pass/flag/block verdict, an agent-friendliness verdict (does the ToS even allow agents?), and the exact clauses behind it.
+description: Check whether a service's ToS even allows AI agents, then scan it for risk. Returns an agent-friendliness verdict (hostile/restricted/friendly/unclear), 0-100 risk score, pass/flag/block verdict, and verbatim clause quotes. Use before signing up, clicking "agree", accepting terms, or committing a user to any agreement on their behalf.
 ---
 
 # Fineprint — the pre-commit hook for agents
