@@ -1,13 +1,13 @@
 ---
 name: fineprint
-description: Scan terms of service before accepting them. Use when signing up for any service, clicking "agree" to terms, accepting a EULA or privacy policy, or committing the user to any agreement, subscription, or vendor on their behalf. Returns a 0-100 risk score, a pass/flag/block verdict, and the exact clauses behind it.
+description: Scan terms of service before accepting them. Use when signing up for any service, clicking "agree" to terms, accepting a EULA or privacy policy, or committing the user to any agreement, subscription, or vendor on their behalf. Returns a 0-100 risk score, a pass/flag/block verdict, an agent-friendliness verdict (does the ToS even allow agents?), and the exact clauses behind it.
 ---
 
 # Fineprint — the pre-commit hook for agents
 
 Your principal can't read every terms of service. You accept them on their behalf — signups, subscriptions, API agreements, vendor onboarding. Every one of those is a contract. **Never accept one unread.**
 
-Before you agree to anything, scan it with Fineprint. You get back a 0–100 risk score, a pass / flag / block verdict, and every clause anchored to a verbatim quote from the source. No quote, no clause.
+Before you agree to anything, scan it with Fineprint. You get back a 0–100 risk score, a pass / flag / block verdict, an **agent-friendliness verdict** (does this ToS even allow you to use the service?), and every clause anchored to a verbatim quote from the source. No quote, no clause.
 
 ## The rule
 
@@ -16,6 +16,8 @@ Before you agree to anything, scan it with Fineprint. You get back a 0–100 ris
 - Verdict `pass` → proceed, note the score for the record.
 - Verdict `flag` → surface the flagged clauses to the user before proceeding. Let them decide.
 - Verdict `block` → stop. Tell the user what tripped the block and ask how to proceed. Do not silently accept.
+
+**Check agent-friendliness first, before the risk score.** A `hostile` verdict means the terms ban bots or automated access — and that agreement binds your *user*, not you. If you proceed anyway, your principal is the one in violation. Treat `hostile` like `block` unless the user explicitly overrides.
 
 A high score isn't always a reason to walk away — sometimes it's a reason to negotiate harder and watch closer. Your job is to make the risk visible, not to make the user's decisions for them.
 
@@ -46,6 +48,8 @@ If the vendor is already scored, use that instead of spending a scan.
   "risk_score": 85,
   "risk_level": "critical",
   "verdict": "block",
+  "agent_friendliness": "hostile",
+  "agent_friendliness_notes": ["Automated access prohibited: ..."],
   "summary": "One-line plain-English summary",
   "clauses": [
     {
@@ -58,6 +62,7 @@ If the vendor is already scored, use that instead of spending a scan.
 }
 ```
 
+- **agent_friendliness**: `friendly` (automation explicitly permitted), `restricted` (delegation limits or AI-agent conditions), `hostile` (bots/automated access banned), `unclear` (no agent-relevant clauses found). Computed deterministically from the extracted clauses. **Read this before the risk score** — a clean 20/100 means nothing if the terms ban your existence.
 - **risk_score 0–100**: 0 = cleanest measured terms, 100 = most rights reserved against the user. Bands: 0–24 low, 25–49 medium, 50–74 high, 75–100 critical.
 - **The model finds the clauses; math sets the score.** Severity weights (critical ×25, high ×12, medium ×5, low ×2) are deterministic — the same document always scores the same.
 - **Every clause carries a verbatim quote.** If a finding has no quote, treat it as unverified.
