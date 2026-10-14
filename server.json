@@ -17,8 +17,7 @@
         "type": "stdio"
       },
       "registryType": "oci",
-      "identifier": "ghcr.io/fineprintcorp/fineprint-mcp:latest",
-      "version": "1.0.0",
+      "identifier": "ghcr.io/fineprintcorp/fineprint-mcp:1.0.0",
       "runtimeHint": "docker",
       "environmentVariables": [
         {
