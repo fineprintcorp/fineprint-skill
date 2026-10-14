@@ -4,6 +4,9 @@
 # without one, but MCP introspection (initialize + tools/list) works keyless.
 FROM python:3.12-slim
 
+# Required by the official MCP Registry: binds this image to the server name.
+LABEL io.modelcontextprotocol.server.name="io.github.fineprintcorp/fineprint"
+
 WORKDIR /app
 
 COPY requirements.txt .
