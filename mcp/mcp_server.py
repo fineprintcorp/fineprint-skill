@@ -87,6 +87,17 @@ def _summarize(report: dict, cached: bool = False) -> str:
         lines.append("Recommended actions:")
         lines.extend(f"  * {a}" for a in report["recommended_actions"][:4])
     lines.append(f"Full report id: {report['id']} (use get_scan_report for the JSON)")
+    aa = report.get("agent_access") or {}
+    if aa:
+        lines.append(
+            f"Agent access: automated={aa.get('automated_access')}, "
+            f"delegation={aa.get('account_delegation')}, "
+            f"ai_terms={aa.get('ai_agent_terms')}, "
+            f"official_channels_required={aa.get('official_channels_required')} "
+            f"(friendliness verdict: {report.get('agent_friendliness')})"
+        )
+    if report.get("analysis_complete") is False:
+        lines.append("WARNING: analysis incomplete — the document was truncated; findings cover only part of it and this is not a clean pass.")
     lines.append(f"Disclaimer: {DISCLAIMER}")
     return "\n".join(lines)
 
@@ -144,6 +155,45 @@ def get_tos_leaderboard(limit: int = 10, query: str | None = None) -> str:
         )
     lines.append(f"Disclaimer: {DISCLAIMER}")
     return "\n".join(lines) if data["entries"] else "Leaderboard is empty."
+
+
+@mcp.tool()
+def check_agent_access(service: str) -> str:
+    """Pre-flight check: can an AI agent use this service at all, and on
+    what terms? Answers from Fineprint's published leaderboard WITHOUT a
+    scan and without spending quota — call this BEFORE scan_terms_of_service
+    or before signing a principal up for anything. Returns the structured
+    decision (automated access, account delegation, AI-agent terms,
+    official-channels requirement) plus the overall friendliness verdict.
+    If the service is unknown, run scan_terms_of_service on its terms URL."""
+    data = _call("GET", f"/v1/agent-access/{urllib.parse.quote(service)}",
+                 auth=False)
+    if not data.get("known"):
+        return (
+            f"{service}: no verified scan published yet. "
+            "Use scan_terms_of_service with the service's terms URL to check it.\n"
+            f"Disclaimer: {DISCLAIMER}"
+        )
+    acc = data.get("agent_access") or {}
+    channels = acc.get("official_channels_required")
+    channels_s = (
+        "yes — official channels only" if channels is True
+        else "no" if channels is False
+        else "unknown"
+    )
+    lines = [
+        f"{data['service']}: agent-friendliness {str(data.get('agent_friendliness', 'unclear')).upper()}"
+        f" · risk {data.get('risk_score')}/100 ({data.get('risk_level')})",
+        f"- Automated access: {acc.get('automated_access', 'unclear')}",
+        f"- Account delegation: {acc.get('account_delegation', 'unclear')}",
+        f"- AI-agent terms: {acc.get('ai_agent_terms', 'not_mentioned')}",
+        f"- Official channels required: {channels_s}",
+    ]
+    for note in (data.get("agent_friendliness_notes") or [])[:3]:
+        lines.append(f"  · {note}")
+    lines.append(f"Full report: {data.get('full_report')}")
+    lines.append(f"Disclaimer: {DISCLAIMER}")
+    return "\n".join(lines)
 
 
 @mcp.tool()
