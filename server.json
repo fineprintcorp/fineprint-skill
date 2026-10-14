@@ -9,7 +9,7 @@
     "url": "https://github.com/fineprintcorp/fineprint-skill"
   },
   "title": "Fineprint",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "websiteUrl": "https://fineprint-production-4588.up.railway.app",
   "packages": [
     {
@@ -17,7 +17,7 @@
         "type": "stdio"
       },
       "registryType": "oci",
-      "identifier": "ghcr.io/fineprintcorp/fineprint-mcp:1.0.0",
+      "identifier": "ghcr.io/fineprintcorp/fineprint-mcp:1.0.1",
       "runtimeHint": "docker",
       "environmentVariables": [
         {
@@ -25,6 +25,13 @@
           "description": "API key for the Fineprint scan API. Get a free trial key from the signup form on the Fineprint site. Required for all scan tools.",
           "isRequired": true,
           "isSecret": true
+        },
+        {
+          "name": "FINEPRINT_API_URL",
+          "description": "Base URL of the Fineprint API",
+          "default": "https://fineprint-production-4588.up.railway.app",
+          "isRequired": false,
+          "isSecret": false
         }
       ]
     }

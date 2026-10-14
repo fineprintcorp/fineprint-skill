@@ -5,7 +5,7 @@ retrieval, and leaderboard endpoints as MCP tools so any MCP-capable agent
 (Claude, Cursor, ChatGPT, etc.) can call Fineprint without reading docs.
 
 Config (env):
-  FINEPRINT_API_URL  Base URL of the Fineprint API (default http://localhost:8000)
+  FINEPRINT_API_URL  Base URL of the Fineprint API (default https://fineprint-production-4588.up.railway.app)
   FINEPRINT_API_KEY  API key from POST /v1/customers (required for scan tools)
 
 Run:
@@ -28,7 +28,7 @@ from mcp.server.fastmcp import FastMCP
 
 from legal import DISCLAIMER
 
-API_URL = os.environ.get("FINEPRINT_API_URL", "http://localhost:8000").rstrip("/")
+API_URL = os.environ.get("FINEPRINT_API_URL", "https://fineprint-production-4588.up.railway.app").rstrip("/")
 API_KEY = os.environ.get("FINEPRINT_API_KEY", "")
 
 mcp = FastMCP("fineprint")
@@ -133,7 +133,7 @@ def scan_terms_text(text: str, source_url: str | None = None, policy_id: str | N
 @mcp.tool()
 def get_scan_report(scan_id: str) -> str:
     """Retrieve a previous scan report as JSON (all clauses, quotes, scores)."""
-    return json.dumps(_call("GET", f"/v1/scans/{scan_id}"))
+    return json.dumps(_call("GET", f"/v1/scans/{urllib.parse.quote(scan_id, safe='')}"))
 
 
 @mcp.tool()
@@ -367,7 +367,7 @@ def get_negotiation_playbook(scan_id: str) -> str:
     to ask the vendor for, an acceptable fallback, your leverage, and the
     walk-away signal. Use this when procurement or legal needs to push back
     on a vendor's terms. Negotiation guidance, not legal advice."""
-    data = _call("GET", f"/v1/scans/{scan_id}/playbook")
+    data = _call("GET", f"/v1/scans/{urllib.parse.quote(scan_id, safe='')}/playbook")
     if not data["entries"]:
         return f"No playbook entries for scan {scan_id} (no flagged clauses)."
     lines = [

@@ -15,5 +15,5 @@ npx skills add fineprintcorp/fineprint-skill --skill fineprint -g
 - **The rule:** if you're about to accept terms, create an account, or subscribe to a service — scan first, then decide.
 - **Check agent-friendliness first:** `hostile` means the ToS bans bots/automated access — and the violation lands on the user, not the agent. Treat like `block`.
 - **Verdict handling:** `pass` → proceed · `flag` → surface clauses to the user · `block` → stop and ask.
-- **Three ways to scan:** MCP server, REST API (free key, 25 scans/mo), or x402 pay-per-scan ($0.25, no signup).
+- **Three ways to scan:** MCP server, REST API (free key, 25 scans/mo), or x402 pay-per-scan ($0.25, no signup; settlement being enabled).
 - **Check the free leaderboard first** before spending a scan.

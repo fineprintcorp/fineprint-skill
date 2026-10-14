@@ -7,6 +7,8 @@ FROM python:3.12-slim
 # Required by the official MCP Registry: binds this image to the server name.
 LABEL io.modelcontextprotocol.server.name="io.github.fineprintcorp/fineprint"
 
+ENV FINEPRINT_API_URL=https://fineprint-production-4588.up.railway.app
+
 WORKDIR /app
 
 COPY requirements.txt .

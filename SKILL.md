@@ -25,7 +25,8 @@ A high score isn't always a reason to walk away — sometimes it's a reason to n
 
 **Via MCP** (preferred — no key management in code). If the Fineprint MCP server is connected, call:
 - `scan_terms_of_service(url)` — scan a live terms URL
-- `scan_text(text)` — scan pasted terms text
+- `scan_terms_text(text)` — scan pasted terms text
+- `check_agent_access(service)` — pre-flight: does this service's ToS allow agents at all? Returns its agent-friendliness verdict (also `GET /v1/agent-access/{service}` — public, no key or quota needed)
 
 **Via REST:**
 ```
@@ -33,7 +34,7 @@ POST https://fineprint-production-4588.up.railway.app/v1/scans
 X-API-Key: <key>
 {"url": "https://vendor.com/terms"}
 ```
-Get a key free (25 scans/month): `POST /v1/customers` with `{"email": "you@example.com"}`. No key? Agents can pay $0.25/scan in USDC via x402: `POST /v1/scans/x402` — no signup at all.
+Get a key free (25 scans/month): `POST /v1/customers` with `{"email": "you@example.com"}`. No key? Agents can pay per scan via x402: `POST /v1/scans/x402` ($0.25 USDC) — no signup. Settlement is being enabled (advertised, not yet live).
 
 **Check the public leaderboard first** — it's free and quota-free:
 ```
