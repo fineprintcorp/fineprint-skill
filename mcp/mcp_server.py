@@ -7,10 +7,16 @@ retrieval, and leaderboard endpoints as MCP tools so any MCP-capable agent
 Config (env):
   FINEPRINT_API_URL  Base URL of the Fineprint API (default https://fineprint-production-4588.up.railway.app)
   FINEPRINT_API_KEY  API key from POST /v1/customers (required for scan tools)
+  When served over HTTP (the hosted /mcp endpoint in api.py, or --http
+  mode), per-request caller keys are read from the X-API-Key /
+  Authorization header, and keyless callers fall back to per-IP anonymous
+  trial keys. Stdio mode has no request context and always uses the env
+  key — the HTTP fallback keys off the request context's presence, never
+  a global flag, so the two modes can't leak into each other.
 
 Run:
   FINEPRINT_API_KEY=fp_live_YOUR_API_KEY_HERE python mcp_server.py        # stdio (default)
-  FINEPRINT_API_KEY=fp_live_YOUR_API_KEY_HERE python mcp_server.py --http  # streamable HTTP on :8001
+  FINEPRINT_API_KEY=fp_live_YOUR_API_KEY_HERE python mcp_server.py --http  # streamable HTTP on :8001 (root path)
 
 Claude Code:
   claude mcp add fineprint --env FINEPRINT_API_KEY=fp_live_YOUR_API_KEY_HERE -- python /path/to/mcp_server.py
@@ -25,28 +31,129 @@ import urllib.error
 import urllib.parse
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from legal import DISCLAIMER
 
 API_URL = os.environ.get("FINEPRINT_API_URL", "https://fineprint-production-4588.up.railway.app").rstrip("/")
 API_KEY = os.environ.get("FINEPRINT_API_KEY", "")
 
-mcp = FastMCP("fineprint")
-
+# stateless_http + json_response: the hosted mount serves many unrelated
+# callers; per-request JSON responses need no session bookkeeping.
+# streamable_http_path="/" so api.py can mount this app at exactly /mcp.
+# transport_security: the SDK's DNS-rebinding protection rejects unknown
+# Host headers with 421, so the production host must be allowlisted (plus
+# loopback for local use/tests). Extra hosts (e.g. a future custom domain)
+# can be added via FINEPRINT_MCP_ALLOWED_HOSTS, comma-separated.
+_extra_hosts = [
+    h.strip()
+    for h in os.environ.get("FINEPRINT_MCP_ALLOWED_HOSTS", "").split(",")
+    if h.strip()
+]
+mcp = FastMCP(
+    "fineprint",
+    stateless_http=True,
+    json_response=True,
+    streamable_http_path="/",
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=[
+            "fineprint-production-4588.up.railway.app",
+            "fineprint-production-4588.up.railway.app:*",
+            "127.0.0.1:*",
+            "localhost:*",
+            "[::1]:*",
+            "testserver",
+            "testserver:*",
+        ]
+        + _extra_hosts
+        + [f"{h}:*" for h in _extra_hosts],
+        allowed_origins=[
+            "https://fineprint-production-4588.up.railway.app",
+            "https://fineprint-production-4588.up.railway.app:*",
+            "http://127.0.0.1:*",
+            "http://localhost:*",
+            "http://testserver",
+        ],
+    ),
+)
 
 class ApiError(RuntimeError):
     pass
 
 
+def _request_headers():
+    """Headers of the current MCP-over-HTTP request, or None (stdio mode,
+    or outside a request). Never raises."""
+    try:
+        ctx = mcp.get_context()
+        req = ctx.request_context.request
+        return req.headers if req is not None else None
+    except Exception:
+        return None
+
+
+def _caller_key() -> str | None:
+    """The hosted caller's own API key, from the X-API-Key header or an
+    Authorization: Bearer header on the MCP request."""
+    h = _request_headers()
+    if not h:
+        return None
+    key = h.get("x-api-key")
+    if key:
+        return key.strip()
+    auth = h.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip() or None
+    return None
+
+
+def _caller_xff() -> str | None:
+    h = _request_headers()
+    return h.get("x-forwarded-for") if h else None
+
+
+# Anonymous trial keys for keyless hosted callers, cached per caller IP for
+# the life of the process. The API caps anonymous issuance per IP per day,
+# so re-minting per call would burn the cap; one key per IP is the design.
+_anon_keys: dict[str, str] = {}
+
+
+def _anon_key() -> str:
+    xff = _caller_xff() or ""
+    ip = xff.split(",")[-1].strip() if xff else "hosted-local"
+    key = _anon_keys.get(ip)
+    if key:
+        return key
+    if len(_anon_keys) > 10_000:  # unbounded-IP safety valve
+        _anon_keys.clear()
+    # ref tags these keys in the admin traffic split as external agents
+    # arriving via the hosted MCP endpoint (not internal, not direct).
+    data = _call("POST", "/v1/customers/anonymous", {"ref": "mcp-hosted"}, auth=False)
+    key = data["api_key"]
+    _anon_keys[ip] = key
+    return key
+
+
 def _call(method: str, path: str, body: dict | None = None, auth: bool = True) -> dict:
     headers = {"Content-Type": "application/json"}
+    # Forward the caller's X-Forwarded-For so the API's per-IP logic
+    # (anonymous issuance caps, analytics) sees the real caller, not the
+    # loopback hop from the hosted MCP layer.
+    xff = _caller_xff()
+    if xff:
+        headers["X-Forwarded-For"] = xff
     if auth:
-        if not API_KEY:
+        key = _caller_key() or API_KEY
+        if not key and _request_headers() is not None:
+            # HTTP transport with no caller key: anonymous trial fallback.
+            key = _anon_key()
+        if not key:
             raise ApiError(
                 "FINEPRINT_API_KEY is not set. Create one: "
                 "POST /v1/customers on the Fineprint API."
             )
-        headers["X-API-Key"] = API_KEY
+        headers["X-API-Key"] = key
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(
         API_URL + path, data=data, headers=headers, method=method
@@ -197,6 +304,42 @@ def check_agent_access(service: str) -> str:
 
 
 @mcp.tool()
+def terms_check(service: str = "", url: str = "", action: str = "") -> str:
+    """Get a signed Act-Time Terms Receipt BEFORE acting on a service:
+    what its terms said at this moment (risk score, agent-friendliness
+    verdict, the verbatim clauses behind it), pinned to the terms
+    document's hash and signed so anyone can verify it later — the
+    evidence record for 'the agent checked before it acted'. Pass
+    `service` for a published leaderboard service (e.g. 'discord') or
+    `url` for any terms document. `action` optionally records what the
+    agent was about to do (stored as caller-asserted; it is never
+    witnessed). A receipt served from the board/cache costs no scan unit
+    (monthly allowance); one that triggers a fresh scan consumes one."""
+    body: dict = {}
+    if service:
+        body["service"] = service
+    if url:
+        body["url"] = url
+    if action:
+        body["action_context"] = {"action": action}
+    if not body:
+        return "Provide a service slug (e.g. 'discord') or a terms URL."
+    data = _call("POST", "/v1/terms-check", body)
+    lines = [
+        f"Terms receipt {data['receipt_id']} — {data.get('service') or data.get('source_url')}",
+        f"Risk: {data['risk_score']}/100 ({data['risk_level']}); "
+        f"agent access: {data['agent_friendliness']}",
+        f"Pinned terms hash: {data.get('content_hash')}",
+        f"Verify: {data.get('verify_url')}",
+        "Top clauses:",
+    ]
+    for c in data.get("top_clauses", []):
+        lines.append(f"- [{c['severity']}] {c['title']} ({c['category']})")
+    lines.append(f"Disclaimer: {DISCLAIMER}")
+    return "\n".join(lines)
+
+
+@mcp.tool()
 def check_quota() -> str:
     """Show the API key's tier, remaining monthly scans, and overage status."""
     me = _call("GET", "/v1/me")
@@ -341,7 +484,7 @@ def create_policy(
     """Create a custom ToS risk policy owned by your API key — your
     principal's own dealbreakers. block_categories veto a vendor (verdict
     BLOCK); flag_categories mark findings for review (verdict FLAG).
-    Categories come from the 17-category taxonomy, e.g.
+    Categories come from the 21-category taxonomy, e.g.
     binding_arbitration, data_training_use, data_sharing_resale,
     auto_renewal, unilateral_price_change. Use list_policies to see ids."""
     rules = []
