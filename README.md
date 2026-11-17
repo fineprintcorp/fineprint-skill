@@ -13,7 +13,7 @@ every clause anchored to a verbatim quote.
 ## The MCP server
 
 - **Implementation:** `mcp/mcp_server.py` — a FastMCP (Python) server
-  exposing 13 tools covering scans by URL or text, agent-access checks,
+  exposing 14 tools covering scans by URL or text, agent-access checks,
   the public leaderboard, scan retrieval and PDF reports, monitors, and
   policy evaluation.
 - **Container:** `mcp/Dockerfile`; published image
